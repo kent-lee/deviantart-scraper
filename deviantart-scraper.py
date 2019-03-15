@@ -1,18 +1,17 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from html import unescape
-import time
 import requests
 import re
 import json
 import os
 
 
+# read json file from file path
 def get_json(file_path):
     with open(file_path, encoding="utf-8") as f:
         return json.load(f)
 
 
+# get url response and return its html text
 def get_unescape_html(session, url):
     response = session.get(url)
     if response.status_code != 200:
@@ -20,14 +19,17 @@ def get_unescape_html(session, url):
     return unescape(response.text)
 
 
+# get image title from image url html
 def get_image_title(html):
     return re.search(r"<title>(.*) by .*</title>", html)[1]
 
 
+# get author name from image url html
 def get_author_name(html):
     return re.search(r"<title>(.*)'s .*</title>", html)[1]
 
 
+# create directory and name it using author name
 def create_directory(author_name, download_location):
     directory_path = download_location + "\\" + author_name
     if not os.path.exists(directory_path):
@@ -35,19 +37,17 @@ def create_directory(author_name, download_location):
     return directory_path
 
 
+# get download url from image url html
 def get_download_url(html):
     # get download button url
     try:
-        image_url = re.search(r"data-download_url=\"(.*?)\"", html)[1]
-        return re.sub(";", "&", image_url)
+        return re.search(r"data-download_url=\"(.*?)\"", html)[1]
     # get enlarged image url
     except TypeError:
-        try:
-            return re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\"", html)[1]
-        except IndexError:
-            return None
+        return re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\"", html)[1]
 
 
+# get file name from download url response
 def get_file_name(response):
     # get name from the response of download button url
     try:
@@ -57,20 +57,12 @@ def get_file_name(response):
         # get name from the response of enlarged image url
         try:
             return re.search(r".*wixmp.com/f/.*/(.*)\?token=", response.url)[1]
-        # for url that is not image (e.g. gif, swf)
+        # get name from url that is not image (e.g. gif, swf)
         except TypeError:
             return re.match(r"https://.*/(.*)", response.url)[1]
 
 
-def get_driver():
-    options = Options()
-    # let Chrome run in the background
-    options.headless = True
-    # set log level to highest
-    options.add_argument("log-level=3")
-    return webdriver.Chrome(options=options)
-
-
+# get all thumbnail image urls from a gallery url
 def get_thumb_urls(session, author_id, url):
     html = get_unescape_html(session, url)
     offset = 0
@@ -79,7 +71,9 @@ def get_thumb_urls(session, author_id, url):
     csrf = re.search(r"\"csrf\":\"(.*?)\"", html)[1]
     dapilid = re.search(r"\"requestid\":\"(.*?)\"", html)[1]
     
+    # scroll to the bottom of the page
     while True:
+        # mimic scrolling action request
         data = {
             "offset": str(offset),
             "limit": str(limit),
@@ -91,30 +85,11 @@ def get_thumb_urls(session, author_id, url):
         if not found_urls:
             break
         offset += limit
+        # return n urls at a time (n = limit)
         yield list(dict.fromkeys(found_urls))
 
 
-def pass_age_gate(url):
-    driver = get_driver()
-    driver.get(url)
-
-    driver.find_element_by_id("month").send_keys("01")
-    driver.find_element_by_id("day").send_keys("01")
-    driver.find_element_by_id("year").send_keys("1991")
-    driver.find_element_by_class_name("tos-label").click()
-    driver.find_element_by_class_name("submitbutton").click()
-    time.sleep(1)
-
-    image_url = get_download_url(driver.page_source)
-    cookies = driver.get_cookies()
-    session = requests.Session()
-    for cookie in cookies:
-        session.cookies.set(cookie["name"], cookie["value"])
-    response = session.get(image_url)
-    driver.quit()
-    return response
-
-
+# download all images from a gallery url
 def download_images(session, author_id, download_location):
     gallery_url = "https://www.deviantart.com/" + author_id + "/gallery/?catpath=/"
     gallery_html = get_unescape_html(session, gallery_url)
@@ -125,17 +100,13 @@ def download_images(session, author_id, download_location):
     directory_path = create_directory(author_name, download_location)
 
     print("\ndownload for author %s begins\n" %  author_name)
+    # process urls by chunks to improve execution time and memory consumption
     for image_urls in get_thumb_urls(session, author_id, gallery_url):
         for url in image_urls:
             html = get_unescape_html(session, url)
             image_title = get_image_title(html)
             download_url = get_download_url(html)
-            # if there is age restriction download_url cannot be found
-            if download_url is None:
-                response = pass_age_gate(url)
-            else:
-                response = session.get(download_url)
-
+            response = session.get(download_url)
             file_name = get_file_name(response)
             file_path = directory_path + "\\" + file_name
             if os.path.isfile(file_path):
@@ -149,7 +120,10 @@ def download_images(session, author_id, download_location):
 
 def main():
     info = get_json("info.json")
+    # need session for the download button to work
     session = requests.Session()
+    # pass age restriction check
+    session.cookies["agegate_state"] = "1"
     print("there are %d authors..." % len(info["author_ids"]))
     for id in info["author_ids"]:
         download_images(session, id, info["download_location"])
