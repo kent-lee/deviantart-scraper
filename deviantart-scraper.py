@@ -35,7 +35,7 @@ def create_directory(author_name, download_location):
     return directory_path
 
 
-def get_image_url(html):
+def get_download_url(html):
     # get download button url
     try:
         image_url = re.search(r"data-download_url=\"(.*?)\"", html)[1]
@@ -76,15 +76,13 @@ def get_thumb_urls(session, author_id, url):
     offset = 0
     limit = 24
     pattern = r"href=\"(https://www.deviantart.com/" + author_id + r"/art/.*?)\""
-    image_urls = re.findall(pattern, html)
     csrf = re.search(r"\"csrf\":\"(.*?)\"", html)[1]
     dapilid = re.search(r"\"requestid\":\"(.*?)\"", html)[1]
     
     while True:
-        data = { 
+        data = {
             "offset": str(offset),
             "limit": str(limit),
-            "catpath": "/",
             "_csrf": csrf,
             "dapilid": dapilid
         }
@@ -92,10 +90,8 @@ def get_thumb_urls(session, author_id, url):
         found_urls = re.findall(pattern, unescape(response.text))
         if not found_urls:
             break
-        image_urls.extend(found_urls)
         offset += limit
-    # remove duplicates in image_urls list
-    return list(dict.fromkeys(image_urls))
+        yield list(dict.fromkeys(found_urls))
 
 
 def pass_age_gate(url):
@@ -109,7 +105,7 @@ def pass_age_gate(url):
     driver.find_element_by_class_name("submitbutton").click()
     time.sleep(1)
 
-    image_url = get_image_url(driver.page_source)
+    image_url = get_download_url(driver.page_source)
     cookies = driver.get_cookies()
     session = requests.Session()
     for cookie in cookies:
@@ -126,28 +122,28 @@ def download_images(session, author_id, download_location):
         print("\nERROR: author id %s does not exist\n" % author_id)
         return
     author_name = get_author_name(gallery_html)
-    image_urls = get_thumb_urls(session, author_id, gallery_url)
     directory_path = create_directory(author_name, download_location)
 
     print("\ndownload for author %s begins\n" %  author_name)
-    for url in image_urls:
-        html = get_unescape_html(session, url)
-        image_title = get_image_title(html)
-        image_url = get_image_url(html)
-        # if there is age restriction image_url cannot be found
-        if image_url is None:
-            response = pass_age_gate(url)
-        else:
-            response = session.get(image_url)
+    for image_urls in get_thumb_urls(session, author_id, gallery_url):
+        for url in image_urls:
+            html = get_unescape_html(session, url)
+            image_title = get_image_title(html)
+            download_url = get_download_url(html)
+            # if there is age restriction download_url cannot be found
+            if download_url is None:
+                response = pass_age_gate(url)
+            else:
+                response = session.get(download_url)
 
-        file_name = get_file_name(response)
-        file_path = directory_path + "\\" + file_name
-        if os.path.isfile(file_path):
-            print("author %s is up-to-date\n" % author_name)
-            return
-        print("download image: %s (%s)" % (image_title, file_name))
-        with open(file_path, "wb") as f:
-            f.write(response.content)
+            file_name = get_file_name(response)
+            file_path = directory_path + "\\" + file_name
+            if os.path.isfile(file_path):
+                print("author %s is up-to-date\n" % author_name)
+                return
+            print("download image: %s (%s)" % (image_title, file_name))
+            with open(file_path, "wb") as f:
+                f.write(response.content)
     print("\ndownload for author %s completed\n" % author_name)
 
 
