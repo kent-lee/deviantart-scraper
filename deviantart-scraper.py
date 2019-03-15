@@ -71,27 +71,29 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 
-# https://stackoverflow.com/questions/20986631/how-can-i-scroll-a-web-page-using-selenium-webdriver-in-python
-# below function is copied and modified from above link
-def get_thumb_urls(author_id, url):
-    driver = get_driver()
-    driver.get(url)
-    
+def get_thumb_urls(session, author_id, url):
+    html = get_unescape_html(session, url)
+    offset = 0
+    limit = 24
     pattern = r"href=\"(https://www.deviantart.com/" + author_id + r"/art/.*?)\""
-    image_urls = re.findall(pattern, driver.page_source)
-    last_height = driver.execute_script("return document.body.scrollHeight")
-
-    while True:
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(1)
-        new_height = driver.execute_script("return document.body.scrollHeight")
-        image_urls.extend(re.findall(pattern, driver.page_source))
-
-        if new_height == last_height:
-            break
-        last_height = new_height
+    image_urls = re.findall(pattern, html)
+    csrf = re.search(r"\"csrf\":\"(.*?)\"", html)[1]
+    dapilid = re.search(r"\"requestid\":\"(.*?)\"", html)[1]
     
-    driver.quit()
+    while True:
+        data = { 
+            "offset": str(offset),
+            "limit": str(limit),
+            "catpath": "/",
+            "_csrf": csrf,
+            "dapilid": dapilid
+        }
+        response = session.post(url, data=data)
+        found_urls = re.findall(pattern, unescape(response.text))
+        if not found_urls:
+            break
+        image_urls.extend(found_urls)
+        offset += limit
     # remove duplicates in image_urls list
     return list(dict.fromkeys(image_urls))
 
@@ -121,10 +123,10 @@ def download_images(session, author_id, download_location):
     gallery_url = "https://www.deviantart.com/" + author_id + "/gallery/?catpath=/"
     gallery_html = get_unescape_html(session, gallery_url)
     if gallery_html is None:
-        print("\nERROR: author %d does not exist\n" % author_id)
+        print("\nERROR: author id %s does not exist\n" % author_id)
         return
     author_name = get_author_name(gallery_html)
-    image_urls = get_thumb_urls(author_id, gallery_url)
+    image_urls = get_thumb_urls(session, author_id, gallery_url)
     directory_path = create_directory(author_name, download_location)
 
     print("\ndownload for author %s begins\n" %  author_name)
