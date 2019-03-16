@@ -1,6 +1,8 @@
 # DeviantArt Scraper
 
-This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will download all original images, including `jpg`, `png`, `gif` and `swf` file formats, from specified artists to specified download location, both of which can be edited in `info.json` file. In the download location, the program will create and name directories using the artist names, then download images to the corresponding directories. It checks on artist new uploads, so it will only download new images if the directory already exists.
+This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will download all original images, including `jpg`, `png`, `gif` ,`swf`, and `zip` file formats, from specified artists to specified download location, both of which can be edited in `info.json` file. In the download location, the program will create and name directories using the artist names, then download images to the corresponding directories. It checks on artist new uploads, so it will only download new images if the directory already exists.
+
+![alt text](doc/download.gif?raw=true "download")
 
 ![alt text](doc/result.png?raw=true "result")
 
@@ -28,15 +30,15 @@ I encountered 3 main difficulties in this project:
 
 2. on the DeviantArt gallery website, you need to scroll to the bottom of the page to see all the contents
 
-    - Solution 1: use `Selenium driver` to automate the scrolling action. I tried this initially, as it was the most popular method on Stack Overflow. The result, however, was not satisfying. The program execution time was too slow, especially for galleries containing hundreds of art works, due to 2 main reasons: 1. the driver itself was slow. 2. the driver needed to wait for the website's JavaScript to load whenever a scroll action was sent
+    - Solution 1: use `Selenium driver` to automate the scrolling action. This method works, but the execution time is too slow, especially for galleries containing hundreds of art works. The reasons for this are: 1. the driver itself is slow. 2. the driver needs to wait for the website's JavaScript to load whenever a scroll action is sent
 
-    - Solution 2: send POST request to mimic the scrolling action. I found that whenever the website was revealing new contents during scrolling, there was always a POST request sent before anything. The request was for the scrolling action, which contained form data that can be found in the website page source, as well as values like `offset` that indicate the relative position and the number of visible elements
+    - Solution 2: send POST request to mimic the scrolling action. I found that whenever the website is revealing new contents during scrolling, there is always a POST request sent before anything. The request is for the scrolling action, which contains form data that can be found in the website page source, as well as values like `offset` and `limit` that control the relative position and the number of visible elements
 
 3. bypass the age restriction
 
-    - Solution 1: use `Selenium driver` to fill the age confirmation form. This time, the execution time was acceptable because the filling process was much faster. However, I wanted to avoid using the driver as much as possible
+    - Solution 1: use `Selenium driver` to fill the age confirmation form. This time, the execution time is acceptable because the filling process is much faster. However, I want to avoid using the driver as much as possible
 
-    - Solution 2: I found that DeviantArt used cookies to save the age check result. So, by setting the `session.cookies` to the appropriate value, there would be no age check
+    - Solution 2: I found that DeviantArt uses cookies to save the age check result. So, by setting the `session.cookies` to the appropriate value, there will be no age check
 
 ## Todo
 
