@@ -22,6 +22,10 @@ This is my personal project created to download images from [DeviantArt](https:/
 
 ## Notes
 
+- the program uses threads to download images from multiple authors simultaneously, that is, each thread is responsible for a single author. So, the more authors you have, the more threads the program uses, and ultimately the faster the overall process. Likewise, if you only have one author, the program will run noticeably slower because there is only one thread running
+
+## Challenges
+
 I encountered 3 main difficulties in this project:
 
 1. there are 2 ways to download an image: through download button URL or through the image URL. The former is preferred because it grabs the highest image quality. However, this has a small problem. The URL contains a token that turns invalid if certain actions are performed, such as refreshing the page, reopening the browser, and exceeding a certain time limit
@@ -45,5 +49,3 @@ I encountered 3 main difficulties in this project:
 - refactor code
 
 - add more functionality (e.g. ranking)
-
-- use threads to make the download process faster
