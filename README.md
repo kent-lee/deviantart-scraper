@@ -1,6 +1,8 @@
 # DeviantArt Scraper
 
-This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will download all original images, including `jpg`, `png`, `gif` ,`swf`, and `zip` file formats, from specified artists to specified download location, both of which can be edited in `info.json` file. In the download location, the program will create and name directories using the artist names, then download images to the corresponding directories. It checks on artist new uploads, so it will only download new images if the directory already exists.
+This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will download all highest resolution images, including `jpg`, `png`, `gif` ,`swf`, and `zip` file formats, from specified artists to specified download location, both of which can be edited in `info.json` file. In the download location, the program will create and name directories using the artist names, then download images to the corresponding directories. It stores update information for each artist, so it will only download new uploads.
+
+The program retrieves request responses in chunks and uses threads to download images. The chunk size and the number of threads are declared at the beginning of the program; they can be edited based on your preference. The default values are `1 MB` chunk size and `24` threads. With this setting on my computer, I usually get around `8.5 MB/s` download speed.
 
 ![alt text](doc/download.gif?raw=true "download")
 
@@ -14,15 +16,11 @@ This is my personal project created to download images from [DeviantArt](https:/
 
         pip install --user requests
 
-3. edit `info.json` file
+3. edit `info.json` file. Ignore field `update_info` as it is filled by the program for tracking update. Only edit `download_location` and `author_id`
 
 4. go to root directory and run the program
 
         python pixiv-scraper.py
-
-## Notes
-
-- the program uses threads to download images from multiple authors simultaneously, that is, each thread is responsible for a single author. So, the more authors you have, the more threads the program uses, and ultimately the faster the overall process. Likewise, if you only have one author, the program will run noticeably slower because there is only one thread running
 
 ## Challenges
 
