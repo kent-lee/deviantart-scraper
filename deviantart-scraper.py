@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+from multiprocessing.pool import ThreadPool
 from functools import partial
 from html import unescape
 import timeit
@@ -10,8 +10,6 @@ import os
 
 USER_FILE = "info.json"
 THREADS = 24
-# 1 MB, change this value based on your internet speed
-CHUNK_SIZE = 1048576
 image_num = 0
 total_size = 0
 
@@ -107,6 +105,7 @@ def get_image_urls(session, user_info, gallery_info):
     need_update = True
     image_urls = []
     offset = 0
+    limit = 24
     pattern = r"\"(https://www.deviantart.com/%s/art/.*?)\"" % gallery_info["author_id"]
     author_id = gallery_info["author_id"]
     newest_image_url = gallery_info["newest_image_url"]
@@ -122,7 +121,7 @@ def get_image_urls(session, user_info, gallery_info):
         # mimic scrolling action request
         data = {
             "offset": str(offset),
-            "limit": str(THREADS),
+            "limit": str(limit),
             "_csrf": gallery_info["csrf"],
             "dapilid": gallery_info["dapilid"]
         }
@@ -130,7 +129,7 @@ def get_image_urls(session, user_info, gallery_info):
         found_urls = re.findall(pattern, unescape(response.text))
         found_urls, need_update = check_update(found_urls, last_visit_url)
         image_urls.extend(found_urls)
-        offset += THREADS
+        offset += limit
     return image_urls
 
 
@@ -139,22 +138,24 @@ def save_image(session, dir_path, url):
     html = get_unescape_html(session, url)
     image_title = re.search(r"<title>(.*) by .*</title>", html)[1]
     download_url = get_download_url(html)
-    with session.get(download_url, stream=True) as r:
-        file_name = get_file_name(r)
-        file_path = dir_path + "\\" + file_name
-        print("download image: %s (%s)" % (image_title, file_name))
-        global image_num
-        image_num += 1
-        with open(file_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
-                if chunk:
-                    f.write(chunk)
-                    global total_size
-                    total_size += len(chunk)
+    response = session.get(download_url)
+    file_name = get_file_name(response)
+    file_path = dir_path + "\\" + file_name
+    print("download image: %s (%s)" % (image_title, file_name))
+    global image_num
+    image_num += 1
+    with open(file_path, "wb") as f:
+        f.write(response.content)
+        global total_size
+        total_size += len(response.content)
 
 
 # download all images from a gallery url
-def download_images(session, user_info, id):
+def download_images(user_info, id):
+    # need session for the download button to work
+    session = requests.Session()
+    # bypass age restriction check
+    session.cookies["agegate_state"] = "1"
     gallery_info = get_gallery_info(session, id)
     if gallery_info is None:
         print("\nERROR: author id %s does not exist\n" % id)
@@ -168,30 +169,26 @@ def download_images(session, user_info, id):
         print("author %s is up-to-date\n" % author_name)
         return
     # use all available cores, otherwise specify the number as an argument
-    with ThreadPoolExecutor(max_workers=THREADS) as executor:
-        executor.map(partial(save_image, session, dir_path), image_urls)
+    with ThreadPool(THREADS) as pool:
+        pool.map(partial(save_image, session, dir_path), image_urls)
     print("\ndownload for author %s completed\n" % author_name)
 
 
 def main():
     start_time = timeit.default_timer()
     user_info = read_json(USER_FILE)
-    # need session for the download button to work
-    session = requests.Session()
-    # bypass age restriction check
-    session.cookies["agegate_state"] = "1"
     print("\nthere are %d authors...\n" % len(user_info["author_ids"]))
     for id in user_info["author_ids"]:
-        download_images(session, user_info, id)
+        download_images(user_info, id)
     update_json(user_info, USER_FILE)
     
     duration = timeit.default_timer() - start_time
-    size_mb = total_size / CHUNK_SIZE
+    size_mb = total_size / 1000000
     print("\nSUMMARY")
     print("---------------------------------")
     print("time elapsed:\t%.4f seconds" % duration)
     print("total size:\t%.4f MB" % size_mb)
-    print("total images:\t%d" % image_num)
+    print("total images:\t%d images" % image_num)
     print("download speed:\t%.4f MB/s" % (size_mb / duration))
 
 
