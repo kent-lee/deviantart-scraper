@@ -1,8 +1,10 @@
 from multiprocessing.pool import ThreadPool
 from functools import partial
 from html import unescape
-import timeit
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import timeit
 import re
 import json
 import os
@@ -151,11 +153,7 @@ def save_image(session, dir_path, url):
 
 
 # download all images from a gallery url
-def download_images(user_info, id):
-    # need session for the download button to work
-    session = requests.Session()
-    # bypass age restriction check
-    session.cookies["agegate_state"] = "1"
+def download_images(session, user_info, id):
     gallery_info = get_gallery_info(session, id)
     if gallery_info is None:
         print("\nERROR: author id %s does not exist\n" % id)
@@ -176,14 +174,23 @@ def download_images(user_info, id):
 
 def main():
     start_time = timeit.default_timer()
+    # need session for the download button to work
+    session = requests.Session()
+    # bypass age restriction check
+    session.cookies["agegate_state"] = "1"
+    # retry when exceed the max request number
+    retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+    session.mount("http://", HTTPAdapter(max_retries=retries))
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+
     user_info = read_json(USER_FILE)
     print("\nthere are %d authors...\n" % len(user_info["author_ids"]))
     for id in user_info["author_ids"]:
-        download_images(user_info, id)
+        download_images(session, user_info, id)
     update_json(user_info, USER_FILE)
     
     duration = timeit.default_timer() - start_time
-    size_mb = total_size / 1000000
+    size_mb = total_size / 1048576
     print("\nSUMMARY")
     print("---------------------------------")
     print("time elapsed:\t%.4f seconds" % duration)
