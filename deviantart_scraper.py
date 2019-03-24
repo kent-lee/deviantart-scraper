@@ -47,26 +47,41 @@ def create_directory(author_name, download_location):
 # get download url from image url html
 def get_download_url(html):
     # get download button url
-    try:
-        return re.search(r"data-download_url=\"(.*?)\"", html)[1]
-    # get enlarged image url
-    except TypeError:
+    download_btn = re.search(r"data-download_url=\"(.*?)\"", html)
+    if download_btn:
+        return download_btn[1]
+    # get direct image url with prefix https://images-wixmp
+    direct_image = re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\?token=", html)
+    if direct_image and re.search("/v1/fill/", direct_image[1]):
+        # set image properties. For more details, visit below link:
+        # https://support.wixmp.com/en/article/image-service-3835799
+        img_settings = "w_5100,h_5100,bl,q_100"
+        direct_image = re.sub("/f/", "/intermediary/f/", direct_image[1])
+        direct_image = re.sub("/v1/fill/.*/", "/v1/fill/%s/" % img_settings, direct_image)
+        return direct_image
+    # get direct image url with other prefixes like https://img00
+    else:
         return re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\"", html)[1]
 
 
 # get original file name from download url response
 def get_file_name(response):
     # get name from the response of download button url
-    try:
-        file_name = response.headers['Content-Disposition']
+    if "Content-Disposition" in response.headers:
+        file_name = response.headers["Content-Disposition"]
         return re.search(r"''(.*)", file_name)[1]
-    except KeyError:
-        # get name from the response of enlarged image url
+    # get name from response url with image settings
+    if re.search("/v1/fill/", response.url):
         try:
-            return re.search(r".*wixmp.com/f/.*/(.*)\?token=", response.url)[1]
-        # get name from url that is not image (e.g. gif, swf)
+            re.search(r"w_\d+,h_\d+,bl,q_100/(.*)", response.url)[1]
         except TypeError:
-            return re.match(r"https://.*/(.*)", response.url)[1]
+            print("ERROR: %s" % response.url)
+    # get name from response url without image settings
+    try:
+        return re.search(r".*wixmp.com/f/.*/(.*)\?token=", response.url)[1]
+    # get name from response url that is not image (e.g. gif, swf)
+    except TypeError:
+        return re.match(r"https://.*/(.*)", response.url)[1]
 
 
 # get the gallery info of an author
@@ -153,7 +168,16 @@ def save_image(session, dir_path, url):
 
 
 # download all images from a gallery url
-def download_images(session, user_info, id):
+def download_images(user_info, id):
+    # declare session here to prevent remote host from closing connection
+    session = requests.Session()
+    # bypass age restriction check
+    session.cookies["agegate_state"] = "1"
+    # retry when exceed the max request number
+    retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+    session.mount("http://", HTTPAdapter(max_retries=retries))
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+
     gallery_info = get_gallery_info(session, id)
     if gallery_info is None:
         print("\nERROR: author id %s does not exist\n" % id)
@@ -174,19 +198,11 @@ def download_images(session, user_info, id):
 
 def main():
     start_time = timeit.default_timer()
-    # need session for the download button to work
-    session = requests.Session()
-    # bypass age restriction check
-    session.cookies["agegate_state"] = "1"
-    # retry when exceed the max request number
-    retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
-    session.mount("http://", HTTPAdapter(max_retries=retries))
-    session.mount("https://", HTTPAdapter(max_retries=retries))
 
     user_info = read_json(USER_FILE)
     print("\nthere are %d authors...\n" % len(user_info["author_ids"]))
     for id in user_info["author_ids"]:
-        download_images(session, user_info, id)
+        download_images(user_info, id)
     update_json(user_info, USER_FILE)
     
     duration = timeit.default_timer() - start_time
