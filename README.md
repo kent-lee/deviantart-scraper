@@ -2,7 +2,7 @@
 
 This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will grab the highest resolution images and anything achieved in the download button from specified artists to specified download location, both of which can be edited in `info.json` file. In the download location, the program will create and name directories using the artist names, then download images to the corresponding directories. It stores update information for each artist, so it will only download new uploads.
 
-The program uses threads to download images. The number of threads is declared at the beginning of the program; it can be edited based on your preference. With the default value of `24` threads, I am getting around `8 MB/s` download speed.
+The program uses threads to download images. The number of threads is declared at the beginning of the program; it can be edited based on your preference. With the default value of `24` threads, I am getting around `8 MB/s` download speed. Note that the program is developed and used on Windows 10; I have yet to test it on other OS.
 
 ![alt text](doc/download.gif?raw=true "download")
 
@@ -30,23 +30,35 @@ The program uses threads to download images. The number of threads is declared a
 
 ## Challenges
 
-1. there are two ways to download an image: through download button URL or through the image URL. The former is preferred because it grabs the highest image quality and other file formats including `jpg`, `png`, `gif`, `swf`, `abr`, and `zip`. However, this has a small problem. The URL contains a token that turns invalid if certain actions are performed, such as refreshing the page, reopening the browser, and exceeding a certain time limit
+1. there are two ways to download an image: through download button URL or through direct image URL. The former is preferred because it grabs the highest image quality and other file formats including `jpg`, `png`, `gif`, `swf`, `abr`, and `zip`. However, this has a small problem. The URL contains a token that turns invalid if certain actions are performed, such as refreshing the page, reopening the browser, and exceeding a certain time limit
 
     - Solution: use `session` to get or post all URLs
 
-2. on the DeviantArt gallery website, you need to scroll to the bottom of the page to see all the contents
+2. for direct image URL, the image quality is much lower than the original upload (the resolution and size of the original upload can be found in the right sidebar). This is not the case few years ago when you had access to the original image quality URL through right click, but on 2017, [Wix](https://www.wix.com/) acquired DeviantArt, and has been migrating the images to their own image hosting system from the original DeviantArt system. They changed most of the direct images to link to a stripped-down version of the original images instead of the original images themselves; hence the bad image quality. Below are the three different formats of direct image URLs I found:
+
+      - URL that has `/v1/fill` inside: this means that the image went through Wix's encoding system and is modified to a specific size and quality. In this case, you remove `?token=` and its values, add `/intermediary` in front of `/f/` in the URL, and change the image settings right after `/v1/fill/` to `w_5100,h_5100,bl,q_100`. The meanings of the values can be found in [Wix's Image Service](https://support.wixmp.com/en/article/image-service-3835799), but basically, `w_5100,h_5100` requests the width and height to be 5100, `bl` requires the baseline JPEG version, and `q_100` sets the quality to 100% of the original image. The reason to have this dimension is because according to the API:
+
+        > In case the required image is larger than the original, upscale should be enabled (lg_1) in order for a proportional upscale to be applied. If upscale is not enabled, the returned image will maintain the original size.
+
+        example: [original URL](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/90b0cf78-3356-43b3-a7a2-8e6bf0e85ef1/dcbojon-68d45ef2-5ab7-408b-bf04-cf6d21aa16b5.jpg/v1/fill/w_1024,h_1280,q_70,strp/lantern_by_guweiz_dcbojon-fullview.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9MTI4MCIsInBhdGgiOiJcL2ZcLzkwYjBjZjc4LTMzNTYtNDNiMy1hN2EyLThlNmJmMGU4NWVmMVwvZGNib2pvbi02OGQ0NWVmMi01YWI3LTQwOGItYmYwNC1jZjZkMjFhYTE2YjUuanBnIiwid2lkdGgiOiI8PTEwMjQifV1dLCJhdWQiOlsidXJuOnNlcnZpY2U6aW1hZ2Uub3BlcmF0aW9ucyJdfQ.-Gv_pRk6mqruJcBsg_kIpdAyRdWGzSzAI_YQT0Umh_A) vs [modified URL](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/intermediary/f/90b0cf78-3356-43b3-a7a2-8e6bf0e85ef1/dcbojon-68d45ef2-5ab7-408b-bf04-cf6d21aa16b5.jpg/v1/fill/w_5100,h_5100,bl,q_100/lantern_by_guweiz_dcbojon-fullview.jpg). The original url has a file size of 153 KB and 1024x1280 resolution, while the modified URL has a file size of 2.03 MB and 2190x2738 resolution. The result is still not as good as the [original upload](https://www.deviantart.com/guweiz/art/Lantern-745215143) (4.2 MB and 2700×3375 resolution), but this is the closest I can get
+
+      - URL with no `/v1/fill` inside: this is the original image, so just download it
+
+      - URL with `https://img00`, `https://pre00`, or anything similar: I do not know how to get the original image from these types of links. Thankfully, they rarely appear
+
+3. on the DeviantArt gallery website, you need to scroll to the bottom of the page to see all the contents
 
     - Solution 1: use `Selenium driver` to automate the scrolling action. This method works, but the execution time is too slow, especially for galleries containing hundreds of art works. The reasons for this are: 1. the driver itself is slow. 2. the driver needs to wait for the website's JavaScript to load whenever a scroll action is sent
 
     - Solution 2: send POST request to mimic the scrolling action. I found that whenever the website is revealing new contents during scrolling, there is always a POST request sent before anything. The request is for the scrolling action, and the form data can be found in the website page source
 
-3. bypass the age restriction
+4. bypass the age restriction
 
     - Solution 1: use `Selenium driver` to fill the age confirmation form. This time, the execution time is acceptable because the filling process is much faster. However, I want to avoid using the driver as much as possible
 
     - Solution 2: I found that DeviantArt uses cookies to save the age check result. So, by setting the `session.cookies` to the appropriate value, there will be no age check
 
-4. unstable connection
+5. unstable connection
 
     - sometimes the `requests` module will close the program with errors `An existing connection was forcibly closed by the remote host` or `Max retries exceeded with url`. I am not sure the exact cause, but it is most likely due to the high amount of requests sent from the same IP address in a short period of time; hence the server refuses the connection
 
