@@ -4,10 +4,10 @@ from html import unescape
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from pathlib import Path
 import timeit
 import re
 import json
-import os
 
 
 USER_FILE = "info.json"
@@ -23,43 +23,45 @@ def read_json(file_path):
 
 
 # update user info to json file
-def update_json(user_info, file_path):
+def write_json(user_info, file_path):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(user_info, f, indent=4, ensure_ascii=False)
 
 
 # get url response and return its html text
 def get_unescape_html(session, url):
-    response = session.get(url)
-    if response.status_code != 200:
+    res = session.get(url)
+    if res.status_code != 200:
         return None
-    return unescape(response.text)
+    return unescape(res.text)
 
 
 # create directory and name it using author name
-def create_directory(author_name, download_location):
-    dir_path = download_location + "\\" + author_name
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
+def create_directory(download_location, author_name):
+    dir_path = Path(download_location, author_name)
+    dir_path.mkdir(exist_ok = True)
     return dir_path
 
 
 # get download url from image url html
-def get_download_url(html):
+def get_download_url(html, fail=False):
     # get download button url
     download_btn = re.search(r"data-download_url=\"(.*?)\"", html)
     if download_btn:
         return download_btn[1]
-    # get direct image url with prefix https://images-wixmp
+    # get direct image url with prefix /v1/fill/ inside
     direct_image = re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\?token=", html)
     if direct_image and re.search("/v1/fill/", direct_image[1]):
+        # only image quality is allowed to modify for new uploads
+        if fail:
+            return re.sub(r"q_\d+,strp", "q_100", direct_image[1])
         # set image properties. For more details, visit below link:
         # https://support.wixmp.com/en/article/image-service-3835799
-        img_settings = "w_5100,h_5100,bl,q_100"
+        image_settings = "w_5100,h_5100,bl,q_100"
         direct_image = re.sub("/f/", "/intermediary/f/", direct_image[1])
-        direct_image = re.sub("/v1/fill/.*/", "/v1/fill/%s/" % img_settings, direct_image)
+        direct_image = re.sub("/v1/fill/.*/", f"/v1/fill/{image_settings}/", direct_image)
         return direct_image
-    # get direct image url with other prefixes like https://img00
+    # get direct image url with other prefixes like /f/ or https://img00
     else:
         return re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\"", html)[1]
 
@@ -75,7 +77,7 @@ def get_file_name(response):
         try:
             re.search(r"w_\d+,h_\d+,bl,q_100/(.*)", response.url)[1]
         except TypeError:
-            print("ERROR: %s" % response.url)
+            re.search(r"w_\d+,h_\d+,q_100/(.*)", response.url)[1]
     # get name from response url without image settings
     try:
         return re.search(r".*wixmp.com/f/.*/(.*)\?token=", response.url)[1]
@@ -86,12 +88,12 @@ def get_file_name(response):
 
 # get the gallery info of an author
 def get_gallery_info(session, author_id):
-    url = "https://www.deviantart.com/" + author_id + "/gallery/?catpath=/"
+    url = f"https://www.deviantart.com/{author_id}/gallery/?catpath=/"
     html = get_unescape_html(session, url)
     if html is None:
         return None
     author_name = re.search(r"<title>(.*)'s .*</title>", html)[1]
-    pattern = r"\"(https://www.deviantart.com/%s/art/.*?)\"" % author_id
+    pattern = rf"\"(https://www.deviantart.com/{author_id}/art/.*?)\""
     newest_image_url = re.search(pattern, html)[1]
     csrf = re.search(r"\"csrf\":\"(.*?)\"", html)[1]
     dapilid = re.search(r"\"requestid\":\"(.*?)\"", html)[1]
@@ -123,15 +125,14 @@ def get_image_urls(session, user_info, gallery_info):
     image_urls = []
     offset = 0
     limit = 24
-    pattern = r"\"(https://www.deviantart.com/%s/art/.*?)\"" % gallery_info["author_id"]
     author_id = gallery_info["author_id"]
-    newest_image_url = gallery_info["newest_image_url"]
+    pattern = rf"\"(https://www.deviantart.com/{author_id}/art/.*?)\""
 
     if author_id not in user_info["update_info"]:
         last_visit_url = ""
     else:
         last_visit_url = user_info["update_info"][author_id]
-    user_info["update_info"][author_id] = newest_image_url
+    user_info["update_info"][author_id] = gallery_info["newest_image_url"]
 
     # scroll to the bottom of the page
     while need_update:
@@ -142,8 +143,8 @@ def get_image_urls(session, user_info, gallery_info):
             "_csrf": gallery_info["csrf"],
             "dapilid": gallery_info["dapilid"]
         }
-        response = session.post(gallery_info["url"], data=data)
-        found_urls = re.findall(pattern, unescape(response.text))
+        res = session.post(gallery_info["url"], data=data)
+        found_urls = re.findall(pattern, unescape(res.text))
         found_urls, need_update = check_update(found_urls, last_visit_url)
         image_urls.extend(found_urls)
         offset += limit
@@ -155,20 +156,21 @@ def save_image(session, dir_path, url):
     html = get_unescape_html(session, url)
     image_title = re.search(r"<title>(.*) by .*</title>", html)[1]
     download_url = get_download_url(html)
-    response = session.get(download_url)
-    file_name = get_file_name(response)
-    file_path = dir_path + "\\" + file_name
-    print("download image: %s (%s)" % (image_title, file_name))
-    global image_num
+    res = session.get(download_url)
+    # new uploads have different image settings, so need to retry again
+    if res.status_code == 404:
+        download_url = get_download_url(html, True)
+        res = session.get(download_url)
+    file_name = get_file_name(res)
+    file_size = (dir_path / file_name).write_bytes(res.content)
+    print(f"download image:{image_title} ({file_name})")
+    global image_num, total_size
     image_num += 1
-    with open(file_path, "wb") as f:
-        f.write(response.content)
-        global total_size
-        total_size += len(response.content)
+    total_size += file_size
 
 
 # download all images from a gallery url
-def download_images(user_info, id):
+def download_images(user_info, author_id):
     # declare session here to prevent remote host from closing connection
     session = requests.Session()
     # bypass age restriction check
@@ -178,45 +180,42 @@ def download_images(user_info, id):
     session.mount("http://", HTTPAdapter(max_retries=retries))
     session.mount("https://", HTTPAdapter(max_retries=retries))
 
-    gallery_info = get_gallery_info(session, id)
+    gallery_info = get_gallery_info(session, author_id)
     if gallery_info is None:
-        print("\nERROR: author id %s does not exist\n" % id)
+        print(f"\nERROR: author id {author_id} does not exist\n")
         return
     author_name = gallery_info["author_name"]
-    dir_path = create_directory(author_name, user_info["download_location"])
+    dir_path = create_directory(user_info["download_location"], author_name)
 
-    print("download for author %s begins\n" % author_name)
+    print(f"download for author {author_name} begins\n")
     image_urls = get_image_urls(session, user_info, gallery_info)
     if not image_urls:
-        print("author %s is up-to-date\n" % author_name)
+        print(f"author {author_name} is up-to-date\n")
         return
-    # use all available cores, otherwise specify the number as an argument
+    # use all available cores if no arguments given
     with ThreadPool(THREADS) as pool:
         pool.map(partial(save_image, session, dir_path), image_urls)
-    print("\ndownload for author %s completed\n" % author_name)
+    print(f"\ndownload for author {author_name} completed\n")
 
 
 def main():
     start_time = timeit.default_timer()
 
     user_info = read_json(USER_FILE)
-    print("\nthere are %d authors...\n" % len(user_info["author_ids"]))
-    for id in user_info["author_ids"]:
+    print(f"\nthere are {len(user_info['author_ids'])} authors...\n")
+    for id in user_info['author_ids']:
         download_images(user_info, id)
-    update_json(user_info, USER_FILE)
+    write_json(user_info, USER_FILE)
     
     duration = timeit.default_timer() - start_time
     size_mb = total_size / 1048576
     print("\nSUMMARY")
     print("---------------------------------")
-    print("time elapsed:\t%.4f seconds" % duration)
-    print("total size:\t%.4f MB" % size_mb)
-    print("total images:\t%d images" % image_num)
-    print("download speed:\t%.4f MB/s" % (size_mb / duration))
+    print(f"time elapsed:\t{duration:.4f} seconds")
+    print(f"total size:\t{size_mb:.4f} MB")
+    print(f"total images:\t{image_num} images")
+    print(f"download speed:\t{(size_mb / duration):.4f} MB/s")
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print()
+    main()
