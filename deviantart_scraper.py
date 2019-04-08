@@ -4,14 +4,15 @@ from html import unescape
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from pathlib import Path
-import timeit
+import time
 import re
 import json
+import os
 
 
 USER_FILE = "info.json"
 THREADS = 24
+MB_BYTES = 1048576
 image_num = 0
 total_size = 0
 
@@ -37,9 +38,10 @@ def get_unescape_html(session, url):
 
 
 # create directory and name it using author name
-def create_directory(download_location, author_name):
-    dir_path = Path(download_location, author_name)
-    dir_path.mkdir(exist_ok = True)
+def create_directory(download_location, author_name=""):
+    dir_path = os.path.join(download_location, author_name)
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
     return dir_path
 
 
@@ -50,7 +52,7 @@ def get_download_url(html, fail=False):
     if download_btn:
         return download_btn[1]
     # get direct image url with prefix /v1/fill/ inside
-    direct_image = re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\?token=", html)
+    direct_image = re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\"", html)
     if direct_image and re.search("/v1/fill/", direct_image[1]):
         # only image quality is allowed to modify for new uploads
         if fail:
@@ -58,12 +60,13 @@ def get_download_url(html, fail=False):
         # set image properties. For more details, visit below link:
         # https://support.wixmp.com/en/article/image-service-3835799
         image_settings = "w_5100,h_5100,bl,q_100"
-        direct_image = re.sub("/f/", "/intermediary/f/", direct_image[1])
+        direct_image = re.match(r"(.*?)\?token=", direct_image[1])[1]
+        direct_image = re.sub("/f/", "/intermediary/f/", direct_image)
         direct_image = re.sub("/v1/fill/.*/", f"/v1/fill/{image_settings}/", direct_image)
         return direct_image
     # get direct image url with other prefixes like /f/ or https://img00
     else:
-        return re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\"", html)[1]
+        return direct_image[1]
 
 
 # get original file name from download url response
@@ -128,10 +131,10 @@ def get_image_urls(session, user_info, gallery_info):
     author_id = gallery_info["author_id"]
     pattern = rf"\"(https://www.deviantart.com/{author_id}/art/.*?)\""
 
-    if author_id not in user_info["update_info"]:
-        last_visit_url = ""
-    else:
+    if author_id in user_info["update_info"]:
         last_visit_url = user_info["update_info"][author_id]
+    else:
+        last_visit_url = ""
     user_info["update_info"][author_id] = gallery_info["newest_image_url"]
 
     # scroll to the bottom of the page
@@ -156,17 +159,32 @@ def save_image(session, dir_path, url):
     html = get_unescape_html(session, url)
     image_title = re.search(r"<title>(.*) by .*</title>", html)[1]
     download_url = get_download_url(html)
-    res = session.get(download_url)
+    res = session.get(download_url, stream=True)
     # new uploads have different image settings, so need to retry again
     if res.status_code == 404:
         download_url = get_download_url(html, True)
-        res = session.get(download_url)
+        res = session.get(download_url, stream=True)
     file_name = get_file_name(res)
-    file_size = (dir_path / file_name).write_bytes(res.content)
-    print(f"download image:{image_title} ({file_name})")
-    global image_num, total_size
-    image_num += 1
-    total_size += file_size
+    with open(os.path.join(dir_path, file_name), "wb") as f:
+        for chunk in res.iter_content(chunk_size=MB_BYTES):
+            f.write(chunk)
+            global total_size
+            total_size += len(chunk)
+        global image_num
+        image_num += 1
+    print(f"download image: {image_title} ({file_name})")
+    return file_name
+
+
+# change file modification dates to allow sorting in File Explorer
+def order_files(files, dir_path):
+    current_time = time.time()
+    # from oldest to newest
+    files.reverse()
+    for file in files:
+        file_path = os.path.join(dir_path, file)
+        os.utime(file_path, (current_time, current_time))
+        current_time += 1
 
 
 # download all images from a gallery url
@@ -194,21 +212,25 @@ def download_images(user_info, author_id):
         return
     # use all available cores if no arguments given
     with ThreadPool(THREADS) as pool:
-        pool.map(partial(save_image, session, dir_path), image_urls)
+        file_names = pool.map(partial(save_image, session, dir_path), image_urls)
     print(f"\ndownload for author {author_name} completed\n")
+
+    # order files' modification dates
+    order_files(file_names, dir_path)
 
 
 def main():
-    start_time = timeit.default_timer()
+    start_time = time.time()
 
     user_info = read_json(USER_FILE)
     print(f"\nthere are {len(user_info['author_ids'])} authors...\n")
+    create_directory(user_info["download_location"])
     for id in user_info['author_ids']:
         download_images(user_info, id)
     write_json(user_info, USER_FILE)
     
-    duration = timeit.default_timer() - start_time
-    size_mb = total_size / 1048576
+    duration = time.time() - start_time
+    size_mb = total_size / MB_BYTES
     print("\nSUMMARY")
     print("---------------------------------")
     print(f"time elapsed:\t{duration:.4f} seconds")
