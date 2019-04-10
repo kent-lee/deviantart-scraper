@@ -2,7 +2,7 @@
 
 This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will grab the highest resolution images and anything achieved in the download button from specified artists to specified download location, both of which can be edited in `info.json` file. In the download location, the program will create and name directories using the artist names, then download images to the corresponding directories. It stores update information for each artist, so it will only download new uploads.
 
-The program uses threads to download images. The number of threads is declared at the beginning of the program; it can be edited based on your preference. With the default value of `24` threads, I am getting around `8 MB/s` download speed. Note that the program is developed and used on Windows 10; I have yet to test it on other OS.
+The program uses threads to download images. The number of threads is declared at the beginning of the program; it can be edited based on your preference. With the default value of `24` threads, I am getting around `8.5 MB/s` download speed. Note that the program is developed and used on Windows 10; I have yet to test it on other OS.
 
 ![alt text](doc/download.gif?raw=true "download")
 
@@ -42,7 +42,7 @@ The program uses threads to download images. The number of threads is declared a
 
         Example: [original URL](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/90b0cf78-3356-43b3-a7a2-8e6bf0e85ef1/dcbojon-68d45ef2-5ab7-408b-bf04-cf6d21aa16b5.jpg/v1/fill/w_1024,h_1280,q_70,strp/lantern_by_guweiz_dcbojon-fullview.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9MTI4MCIsInBhdGgiOiJcL2ZcLzkwYjBjZjc4LTMzNTYtNDNiMy1hN2EyLThlNmJmMGU4NWVmMVwvZGNib2pvbi02OGQ0NWVmMi01YWI3LTQwOGItYmYwNC1jZjZkMjFhYTE2YjUuanBnIiwid2lkdGgiOiI8PTEwMjQifV1dLCJhdWQiOlsidXJuOnNlcnZpY2U6aW1hZ2Uub3BlcmF0aW9ucyJdfQ.-Gv_pRk6mqruJcBsg_kIpdAyRdWGzSzAI_YQT0Umh_A) vs [modified URL](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/intermediary/f/90b0cf78-3356-43b3-a7a2-8e6bf0e85ef1/dcbojon-68d45ef2-5ab7-408b-bf04-cf6d21aa16b5.jpg/v1/fill/w_5100,h_5100,bl,q_100/lantern_by_guweiz_dcbojon-fullview.jpg). The original url has a file size of 153 KB and 1024x1280 resolution, while the modified URL has a file size of 2.03 MB and 2190x2738 resolution. The result is still not as good as the [original upload](https://www.deviantart.com/guweiz/art/Lantern-745215143) (4.2 MB and 2700×3375 resolution), but this is the closest I can get
 
-        UPDATE: for new uploads, this trick no longer works. However, the image quality can still be changed. To do this, you keep everything in the image url the same (token can be removed) and change the part `q_\d+,strp` to `q_100`
+        UPDATE: for new uploads, this trick no longer works. However, the image quality can still be changed. To do this, you keep everything in the image url the same and change the part `q_\d+,strp` to `q_100`
 
       - URL with no `/v1/fill` inside: this is the original image, so just download it
 
