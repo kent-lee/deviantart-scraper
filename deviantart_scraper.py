@@ -29,12 +29,22 @@ def write_json(user_info, file_path):
         json.dump(user_info, f, indent=4, ensure_ascii=False)
 
 
-# get url response and return its html text
-def get_unescape_html(session, url):
-    res = session.get(url)
-    if res.status_code != 200:
-        return None
-    return unescape(res.text)
+def request(session, method, url, response="", headers={}, data={}, stream=False):
+    if method == "GET":
+        res = session.get(url, headers=headers, stream=stream)
+    elif method == "POST":
+        res = session.post(url, headers=headers, data=data)
+    # check if request is successful
+    res.raise_for_status()
+    
+    if response == "HTML":
+        return unescape(res.text)
+    elif response == "BINARY":
+        return res.content
+    elif response == "JSON":
+        return res.json()
+    else:
+        return res
 
 
 # create directory and name it using author name
@@ -92,9 +102,7 @@ def get_file_name(response):
 # get the gallery info of an author
 def get_gallery_info(session, author_id):
     url = f"https://www.deviantart.com/{author_id}/gallery/?catpath=/"
-    html = get_unescape_html(session, url)
-    if html is None:
-        return None
+    html = request(session, "GET", url, "HTML")
     author_name = re.search(r"<title>(.*)'s .*</title>", html)[1]
     pattern = rf"\"(https://www.deviantart.com/{author_id}/art/.*?)\""
     newest_image_url = re.search(pattern, html)[1]
@@ -146,8 +154,8 @@ def get_image_urls(session, user_info, gallery_info):
             "_csrf": gallery_info["csrf"],
             "dapilid": gallery_info["dapilid"]
         }
-        res = session.post(gallery_info["url"], data=data)
-        found_urls = re.findall(pattern, unescape(res.text))
+        html = request(session, "POST", gallery_info["url"], "HTML", data=data)
+        found_urls = re.findall(pattern, html)
         found_urls, need_update = check_update(found_urls, last_visit_url)
         image_urls.extend(found_urls)
         offset += limit
@@ -156,14 +164,15 @@ def get_image_urls(session, user_info, gallery_info):
 
 # download and save image to dir_path
 def save_image(session, dir_path, url):
-    html = get_unescape_html(session, url)
+    html = request(session, "GET", url, "HTML")
     image_title = re.search(r"<title>(.*) by .*</title>", html)[1]
-    download_url = get_download_url(html)
-    res = session.get(download_url, stream=True)
-    # new uploads have different image settings, so need to retry again
-    if res.status_code == 404:
+    try:
+        download_url = get_download_url(html)
+        res = request(session, "GET", download_url, stream=True)
+    except requests.exceptions.HTTPError:
         download_url = get_download_url(html, True)
-        res = session.get(download_url, stream=True)
+        res = request(session, "GET", download_url, stream=True)
+
     file_name = get_file_name(res)
     with open(os.path.join(dir_path, file_name), "wb") as f:
         for chunk in res.iter_content(chunk_size=MB_BYTES):
@@ -177,12 +186,12 @@ def save_image(session, dir_path, url):
 
 
 # change file modification dates to allow sorting in File Explorer
-def order_files(files, dir_path):
+def modify_files_dates(file_names, dir_path):
     current_time = time.time()
     # from oldest to newest
-    files.reverse()
-    for file in files:
-        file_path = os.path.join(dir_path, file)
+    file_names.reverse()
+    for file_name in file_names:
+        file_path = os.path.join(dir_path, file_name)
         os.utime(file_path, (current_time, current_time))
         current_time += 1
 
@@ -215,8 +224,7 @@ def download_images(user_info, author_id):
         file_names = pool.map(partial(save_image, session, dir_path), image_urls)
     print(f"\ndownload for author {author_name} completed\n")
 
-    # order files' modification dates
-    order_files(file_names, dir_path)
+    modify_files_dates(file_names, dir_path)
 
 
 def main():
