@@ -1,81 +1,33 @@
 from argparse import ArgumentParser
-import sys
-import os
-import time
+import sys, os, time
 from lib.deviantart import DeviantArtAPI
+from lib.config import Config
 from lib import utils
+import re
 
-def load_config(file_path="data/config.json"):
-    return utils.load_json(file_path)
-
-def update_config(config, file_path="data/config.json"):
-    utils.update_json(config, file_path)
-
-def add_artists(config, artist_ids, api):
-    for artist_id in artist_ids:
-        config["artists"].setdefault(artist_id, None)
-        artist_name = api.gallery(artist_id)["artist_name"]
-        utils.make_dir(os.path.join(config["save_directory"], artist_name))
-
-def delete_artists(config, artist_ids, api):
-    if artist_ids[0] in "allAllALL":
-        artist_ids = list(config["artists"])
-    for artist_id in artist_ids:
-        config["artists"].pop(artist_id, None)
-        artist_name = api.gallery(artist_id)["artist_name"]
-        utils.remove_dir(os.path.join(config["save_directory"], artist_name))
-
-def clear_artists(config, artist_ids, api):
-    if artist_ids[0] in "allAllALL":
-        artist_ids = list(config["artists"])
-    for artist_id in artist_ids:
-        config["artists"][artist_id] = None
-        artist_name = api.gallery(artist_id)["artist_name"]
-        utils.remove_dir(os.path.join(config["save_directory"], artist_name))
-
-def init_stats():
-    stats = {
-        "start_time": time.time(),
-        "file_count": 0,
-        "total_size": 0,
-        "file_names": []
-    }
-    return stats
-
-def update_stats(files, stats):
-    stats["file_names"] = []
-    for file in files:
-        stats["file_count"] += file["count"]
-        stats["total_size"] += file["size"]
-        stats["file_names"].append(file["name"])
-
-def print_stats(stats):
-    duration = time.time() - stats["start_time"]
-    size_mb = stats["total_size"] / 1048576
+def download_artists(api, config):
+    start_time = time.time()
+    print(f"\nthere are {len(config.artists)} artists\n")
+    result = []
+    for artist_id, artwork_url in config.artists.items():
+        files = api.save_artist(artist_id, config.save_dir, artwork_url)
+        if not files:
+            continue
+        config.update_artist(artist_id, files["url"][0])
+        result.append(files)
+    result = utils.counter(result)
+    duration = time.time() - start_time
+    size_mb = result["size"] / 1048576
     print("\nSUMMARY")
     print("---------------------------------")
     print(f"time elapsed:\t{duration:.4f} seconds")
     print(f"total size:\t{size_mb:.4f} MB")
-    print(f"total artworks:\t{stats['file_count']} artworks")
+    print(f"total artworks:\t{result['count']} artworks")
     print(f"download speed:\t{(size_mb / duration):.4f} MB/s")
 
-def download_artists(api, config):
-    stats = init_stats()
-    print(f"\nthere are {len(config['artists'])} artists\n")
-    save_dir = utils.make_dir(config["save_directory"])
-    for artist_id, artwork_id in config["artists"].items():
-        artist_name = api.gallery(artist_id)["artist_name"]
-        dir_path = utils.make_dir(os.path.join(save_dir, artist_name))
-        files = api.save_artist(artist_id, dir_path, stop=artwork_id)
-        if not files:
-            continue
-        config["artists"][artist_id] = files[0]["url"]
-        update_stats(files, stats)
-        utils.set_files_mtime(stats["file_names"], dir_path)
-    print_stats(stats)
-
-def init_commands():
+def commands():
     parser = ArgumentParser()
+    parser.add_argument("-f", dest="file", default=os.path.join("data", "config.json"), help="set config file")
     parser.add_argument("-l", action="store_true", dest="list", help="list current settings")
     parser.add_argument("-s", dest="save_dir", help="set save directory path")
     parser.add_argument("-a", nargs="+", dest="add", metavar=("", "ID"), help="add artist ids")
@@ -86,37 +38,25 @@ def init_commands():
     return parser.parse_args()
 
 def main():
-    config = load_config()
+    args = commands()
     api = DeviantArtAPI()
-    args = init_commands()
-
-    if not len(sys.argv) > 1:
-        download_artists(api, config)
-        update_config(config)
-        return
+    config = Config(args.file)
 
     if args.list:
-        utils.print_json(config)
-
+        config.print()
     if args.save_dir:
-        config["save_directory"] = args.save_dir
-
+        config.save_dir = args.save_dir
     if args.add:
-        add_artists(config, args.add, api)
-
+        config.add_artists(args.add)
     if args.delete:
-        delete_artists(config, args.delete, api)
-
+        config.delete_artists(args.delete)
     if args.clear:
-        clear_artists(config, args.clear, api)
-
+        config.clear_artists(args.clear)
     if args.threads:
         api.threads = args.threads
-
-    if args.run:
+    if len(sys.argv) == 1 or args.run:
         download_artists(api, config)
-
-    update_config(config)
+    config.update()
 
 if __name__ == "__main__":
     main()

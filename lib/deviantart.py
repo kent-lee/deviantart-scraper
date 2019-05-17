@@ -6,6 +6,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import os, re
+from lib import utils
 
 class DeviantArtAPI:
 
@@ -34,53 +35,51 @@ class DeviantArtAPI:
         res = self.request("GET", url)
         html = unescape(res.text)
         artist_name = re.search(r"<title>(.*)'s .*</title>", html)[1]
-        latest_artwork = re.search(rf"\"(https://www.deviantart.com/{artist_id}/art/.*?)\"", html)[1]
+        latest_upload = re.search(rf"\"(https://www.deviantart.com/{artist_id}/art/.*?)\"", html)[1]
         csrf = re.search(r"\"csrf\":\"(.*?)\"", html)[1]
-        dapilid = re.search(r"\"requestid\":\"(.*?)\"", html)[1]
         data = {
             "url": url,
             "artist_id": artist_id,
             "artist_name": artist_name,
-            "latest_artwork": latest_artwork,
-            "csrf": csrf,
-            "dapilid": dapilid
+            "latest_upload": latest_upload,
+            "csrf": csrf
         }
         return data
 
-    def _update(self, found_urls, offset, stop):
-        # remove duplicates
-        found_urls = list(dict.fromkeys(found_urls))
+    def _scroll(self, urls, offset, stop):
+        urls = list(dict.fromkeys(urls))
         index = None
         if isinstance(stop, str):
-            index = next((i for i,v in enumerate(found_urls) if v == stop), None)
+            index = utils.first_index(urls, lambda v: v == stop)
         elif isinstance(stop, int) and stop - offset < 24:
             index = stop - offset
-        return (found_urls[:index], False) if index is not None or not found_urls else (found_urls, True)
+        return (urls[:index], False) if index is not None or not urls else (urls, True)
 
-    def artist_artworks(self, artist_id, start=1, stop=None):
+    def artist_artworks(self, artist_id, stop=None):
         gallery = self.gallery(artist_id)
-        offset = start - 1 if isinstance(start, int) else 0
+        offset = 0
         limit = 24
-        pattern = rf"\"(https://www.deviantart.com/{artist_id}/art/.*?)\""
+        pattern = rf"\"(https://www.deviantart.com/{artist_id}/art/.+?)\""
         artwork_urls = []
         need_update = True
+
+        if isinstance(stop, str) and stop == gallery["latest_upload"]:
+            return artwork_urls
 
         while need_update:
             # simulate scrolling action request
             data = {
                 "offset": str(offset),
                 "limit": str(limit),
-                "_csrf": gallery["csrf"],
-                "dapilid": gallery["dapilid"]
+                "_csrf": gallery["csrf"]
             }
             res = self.request("POST", gallery["url"], data=data)
             html = unescape(res.text)
-            found_urls = re.findall(pattern, html)
-            found_urls, need_update = self._update(found_urls, offset, stop)
-            artwork_urls.extend(found_urls)
+            urls = re.findall(pattern, html)
+            urls, need_update = self._scroll(urls, offset, stop)
+            artwork_urls.extend(urls)
             offset += limit
-        start = artwork_urls.index(start) if isinstance(start, str) else start - 1
-        return artwork_urls[start:]
+        return artwork_urls
 
     def download_url(self, artwork_html, retry=False):
         # download button url
@@ -89,7 +88,7 @@ class DeviantArtAPI:
             return direct_download[1]
         # direct image url with prefix /v1/fill/ inside
         direct_image = re.findall(r"<img collect_rid=\"1:\d+\" src=\"(.*?)\"", artwork_html)
-        if direct_image and re.search("/v1/fill/", direct_image[1]):
+        if direct_image and "/v1/fill/" in direct_image[1]:
             # only image quality is allowed to modify for new uploads
             if retry:
                 return re.sub(r"q_\d+,strp", "bl,q_100", direct_image[1])
@@ -110,7 +109,7 @@ class DeviantArtAPI:
             file_name = response.headers["Content-Disposition"]
             return re.search(r"''(.*)", file_name)[1]
         # get name from response url with image settings
-        if re.search("/v1/fill/", response.url):
+        if "/v1/fill/" in response.url:
             return re.search(r"w_\d+,h_\d+,bl,q_100/(.*?)($|\?token=.*)", response.url)[1]
         # get name from response url without image settings
         try:
@@ -120,42 +119,46 @@ class DeviantArtAPI:
             return re.match(r"https://.*/(.*)", response.url)[1]
 
     def save_artwork(self, dir_path, artwork_url):
-        file_info = {
-            "title": "",
-            "url": "",
-            "name": "",
+        file = {
+            "title": [],
+            "url": [],
+            "name": [],
             "count": 0,
             "size": 0
         }
         res = self.request("GET", artwork_url)
-        file_info["url"] = res.url
+        file["url"].append(res.url)
         html = unescape(res.text)
         image_title = re.search(r"<title>(.*) by .*</title>", html)[1]
-        file_info["title"] = image_title
+        file["title"].append(image_title)
         try:
             download_url = self.download_url(html)
             res = self.request("GET", download_url, stream=True)
         except requests.exceptions.HTTPError:
             download_url = self.download_url(html, True)
             res = self.request("GET", download_url, stream=True)
-        file_info["name"] = self.file_name(res)
-        with open(os.path.join(dir_path, file_info["name"]), "wb") as f:
+        file_name = self.file_name(res)
+        file["name"].append(file_name)
+        with open(os.path.join(dir_path, file_name), "wb") as f:
             for chunk in res.iter_content(chunk_size=self.download_chunk_size):
                 f.write(chunk)
-                file_info["size"] += len(chunk)
-            file_info["count"] += 1
-        print(f"download image: {image_title} ({file_info['name']})")
-        return file_info
+                file["size"] += len(chunk)
+            file["count"] += 1
+        print(f"download image: {image_title} ({file_name})")
+        return file
 
-    def save_artist(self, artist_id, dir_path, start=1, stop=None):
+    def save_artist(self, artist_id, dir_path, stop=None):
         gallery = self.gallery(artist_id)
         artist_name = gallery["artist_name"]
         print(f"download for author {artist_name} begins\n")
-        artworks = self.artist_artworks(artist_id, start, stop)
-        if not artworks:
+        dir_path = utils.make_dir(dir_path, artist_name)
+        artwork_urls = self.artist_artworks(artist_id, stop)
+        if not artwork_urls:
             print(f"author {artist_name} is up-to-date\n")
             return
         with ThreadPool(self.threads) as pool:
-            files = pool.map(partial(self.save_artwork, dir_path), artworks)
+            files = pool.map(partial(self.save_artwork, dir_path), artwork_urls)
         print(f"\ndownload for author {artist_name} completed\n")
-        return files
+        combined_files = utils.counter(files)
+        utils.set_files_mtime(combined_files["name"], dir_path)
+        return combined_files
