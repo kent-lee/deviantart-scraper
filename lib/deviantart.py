@@ -34,51 +34,44 @@ class DeviantArtAPI:
         url = f"https://www.deviantart.com/{artist_id}/gallery/?catpath=/"
         res = self.request("GET", url)
         html = unescape(res.text)
-        artist_name = re.search(r"<title>(.*)'s .*</title>", html)[1]
-        latest_upload = re.search(rf"\"(https://www.deviantart.com/{artist_id}/art/.*?)\"", html)[1]
-        csrf = re.search(r"\"csrf\":\"(.*?)\"", html)[1]
         data = {
             "url": url,
             "artist_id": artist_id,
-            "artist_name": artist_name,
-            "latest_upload": latest_upload,
-            "csrf": csrf
+            "artist_name": re.search(r"<title>(.*)'s .*</title>", html)[1],
+            "latest_upload": re.search(rf"\"(https://www.deviantart.com/{artist_id}/art/.*?)\"", html)[1],
+            "url_pattern": rf"\"(https://www.deviantart.com/{artist_id}/art/.+?)\"",
+            "csrf": re.search(r"\"csrf\":\"(.*?)\"", html)[1]
         }
         return data
 
-    def _scroll(self, urls, offset, stop):
+    def _scroll(self, gallery, offset, stop):
+        data = {
+            "offset": str(offset),
+            "limit": "24",
+            "_csrf": gallery["csrf"]
+        }
+        res = self.request("POST", gallery["url"], data=data)
+        html = unescape(res.text)
+        urls = re.findall(gallery["url_pattern"], html)
         urls = list(dict.fromkeys(urls))
         index = None
         if isinstance(stop, str):
             index = utils.first_index(urls, lambda v: v == stop)
         elif isinstance(stop, int) and stop - offset < 24:
             index = stop - offset
-        return (urls[:index], False) if index is not None or not urls else (urls, True)
+        return (urls[:index], False) if not urls or index is not None else (urls, True)
 
     def artist_artworks(self, artist_id, stop=None):
         gallery = self.gallery(artist_id)
-        offset = 0
-        limit = 24
-        pattern = rf"\"(https://www.deviantart.com/{artist_id}/art/.+?)\""
-        artwork_urls = []
-        need_update = True
-
         if isinstance(stop, str) and stop == gallery["latest_upload"]:
-            return artwork_urls
-
+            return []
+        artwork_urls = []
+        offset = 0
+        need_update = True
         while need_update:
-            # simulate scrolling action request
-            data = {
-                "offset": str(offset),
-                "limit": str(limit),
-                "_csrf": gallery["csrf"]
-            }
-            res = self.request("POST", gallery["url"], data=data)
-            html = unescape(res.text)
-            urls = re.findall(pattern, html)
-            urls, need_update = self._scroll(urls, offset, stop)
+            urls, need_update = self._scroll(gallery, offset, stop)
             artwork_urls.extend(urls)
-            offset += limit
+            offset += 24
         return artwork_urls
 
     def download_url(self, artwork_html, retry=False):
