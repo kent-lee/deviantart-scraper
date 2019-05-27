@@ -69,7 +69,7 @@ python main.py -c all -t 24 -r
 
 2. for direct image URL, the image quality is much lower than the original upload (the resolution and size of the original upload can be found in the right sidebar). This is not the case few years ago when the original image was accessible through right click, but on 2017, [Wix](https://www.wix.com/) acquired DeviantArt, and has been migrating the images to their own image hosting system from the original DeviantArt system. They linked most of the direct images to a stripped-down version of the original images; hence the bad image quality. Below are the three different formats of direct image URLs I found:
 
-      - URL that has `/v1/fill` inside: this means that the image went through Wix's encoding system and is modified to a specific size and quality. In this case, you remove `?token=` and its values, add `/intermediary` in front of `/f/` in the URL, and change the image settings right after `/v1/fill/` to `w_5100,h_5100,bl,q_100`. The definitions of the values can be found in [Wix's Image Service](https://support.wixmp.com/en/article/image-service-3835799), but basically, `w_5100,h_5100` requests the width and height of the image to be 5100 $\times$ 5100 pixels, `bl` requires the baseline JPEG version, and `q_100` sets the quality to 100% of the original. The reasons to have this dimension are: (1) 5100 pixels is the limit of the system; anything above it will result in `400 Bad Request`. (2) according to the Wix's API:
+      - URL with `/v1/fill` inside: this means that the image went through Wix's encoding system and is modified to a specific size and quality. In this case, you remove `?token=` and its values, add `/intermediary` in front of `/f/` in the URL, and change the image settings right after `/v1/fill/` to `w_5100,h_5100,bl,q_100`. The definitions of the values can be found in [Wix's Image Service](https://support.wixmp.com/en/article/image-service-3835799), but basically, `w_5100,h_5100` requests the width and height of the image to be 5100x5100 pixels, `bl` requires the baseline JPEG version, and `q_100` sets the quality to 100% of the original. The reasons to have this dimension are: (1) 5100 pixels is the limit of the system; anything above it will result in `400 Bad Request`. (2) according to the Wix's API:
 
         > In case the required image is larger than the original, upscale should be enabled (lg_1) in order for a proportional upscale to be applied. If upscale is not enabled, **the returned image will maintain the original size**.
 
@@ -77,9 +77,9 @@ python main.py -c all -t 24 -r
 
         **UPDATE**: for new uploads, this trick no longer works. However, the image quality can still be changed. To do this, you keep everything in the image URL the same and change the part `q_\d+,strp` to `q_100`
 
-      - URL with no `/v1/fill` inside: this is the original image, so just download it
+      - URL with `/f/` but no `/v1/fill` inside: this is the original image, so just download it
 
-      - URL with `https://img00`, `https://pre00`, or anything similar: I do not know how to get the original image from these types of links. Thankfully, they rarely appear
+      - URL with `https://img\d{2}` or `https://pre\d{2}`: this means that the image went through DeviantArt's system and is modified to a specific size. I could not figure out how to get the original image from these types of links, i.e. find `https://orig\d{2}` from them, so I just download the image as is
 
 3. on the DeviantArt gallery website, you need to scroll to the bottom of the page to see all the contents
 
@@ -95,7 +95,7 @@ python main.py -c all -t 24 -r
 
 5. sometimes the `requests` module will close the program with errors `An existing connection was forcibly closed by the remote host` or `Max retries exceeded with url: (image url)`. I am not sure the exact cause, but it is most likely due to the high amount of requests sent from the same IP address in a short period of time; hence the server refuses the connection
 
-    - Solution: declare a `session` for each artist to avoid using the same one for too long, and use `HTTPAdapter` and `Retry` to retry `session.get` in case of `ConnectionError` exception
+    - Solution: use `HTTPAdapter` and `Retry` to retry `session.get` in case of `ConnectionError` exception
 
 ## Todo
 
