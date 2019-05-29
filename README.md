@@ -37,8 +37,8 @@ optional arguments:
   -l               list current settings
   -s SAVE_DIR      set save directory path
   -a  [ID ...]     add artist ids
-  -d all [ID ...]  delete artist ids
-  -c all [ID ...]  clear artists update info
+  -d all [ID ...]  delete artist ids and their directories
+  -c all [ID ...]  clear artists update info and their directories
   -t THREADS       set the number of threads
   -r               run program
 
