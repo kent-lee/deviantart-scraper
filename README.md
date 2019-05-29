@@ -1,6 +1,6 @@
 # DeviantArt Scraper
 
-This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will grab the highest resolution images and anything achieved in the download button from specified artists to specified download directory. In the download directory, the program will create and name subdirectories using the artist names, then download artworks to the corresponding subdirectories. For each artwork, the file modification time are set in order from newest to oldest, such that you can sort files by modified date. Lastly, the update information is stored for each artist, so the program will only download new uploads.
+This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will grab the highest resolution images and anything achieved in the download button from specified artists to specified download directory. In the download directory, the program will create and name subdirectories using the artist names, then save artworks to the corresponding subdirectories. For each artwork, the file modification time are set in order from newest to oldest, such that you can sort files by modified date. Lastly, the update information is stored for each artist, so the program will only download new uploads.
 
 ![alt text](doc/download.gif?raw=true "download")
 
@@ -19,7 +19,6 @@ This is my personal project created to download images from [DeviantArt](https:/
 3. edit `config.json` file in `data` folder manually or via command line interface
 
     - `artists`: the artist name shown in URL
-
     - `save_directory`: the save directory path
 
 ## Usage
@@ -29,11 +28,12 @@ display help message
 ```bash
 $ python main.py -h
 
-usage: main.py [-h] [-l] [-s SAVE_DIR] [-a  [ID ...]] [-d all [ID ...]]
-               [-c all [ID ...]] [-t THREADS] [-r]
+usage: main.py [-h] [-f FILE] [-l] [-s SAVE_DIR] [-a  [ID ...]]
+               [-d all [ID ...]] [-c all [ID ...]] [-t THREADS] [-r]
 
 optional arguments:
   -h, --help       show this help message and exit
+  -f FILE          set config file
   -l               list current settings
   -s SAVE_DIR      set save directory path
   -a  [ID ...]     add artist ids
@@ -41,6 +41,7 @@ optional arguments:
   -c all [ID ...]  clear artists update info
   -t THREADS       set the number of threads
   -r               run program
+
 ```
 
 run the program with current configuration (i.e. update artists' artworks)
@@ -49,17 +50,18 @@ run the program with current configuration (i.e. update artists' artworks)
 python main.py
 ```
 
-add artist IDs then run the program
+load `temp.json` file in `data` folder then add artist IDs. Note that `temp.json` is only used for this instance and is not a replacement for the default `config.json` file
 
 ```bash
-python main.py -a 63924 408459 2188232 -r
+python main.py -f data/temp.json -a wlop trungbui42
 ```
 
-clear all update information (i.e. re-download images), set threads to 24, then run the program
+clear update information (i.e. re-download artworks), set threads to 24, then run the program
 
 ```bash
 python main.py -c all -t 24 -r
 ```
+
 
 ## Challenges
 
