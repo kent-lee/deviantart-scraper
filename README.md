@@ -50,6 +50,12 @@ run the program with current configuration (i.e. update artists' artworks)
 python main.py
 ```
 
+add artist IDs then run the program
+
+```bash
+python main.py -a wlop trungbui42 -r
+```
+
 load `temp.json` file in `data` folder then add artist IDs. Note that `temp.json` is only used for this instance and is not a replacement for the default `config.json` file
 
 ```bash
@@ -85,19 +91,25 @@ python main.py -c all -t 24 -r
 
 3. on the DeviantArt gallery website, you need to scroll to the bottom of the page to see all the contents
 
-    - Solution 1: use `Selenium driver` to automate the scrolling action. This method works, but the execution time is too slow, especially for galleries containing hundreds of art works. The reasons for this are: (1) the driver itself is slow. (2) the driver needs to wait for the website's JavaScript to load whenever a scroll action is sent
+    - Solution 1: use `Selenium` with [ChromeDriver](https://sites.google.com/a/chromium.org/chromedriver/) to automate the scrolling action. This method works, but the execution time is too slow, especially for galleries containing hundreds of art works. The reasons for this are: (1) the driver itself is slow. (2) the driver needs to wait for the website's JavaScript to load whenever a scroll action is sent
 
     - Solution 2: send `POST` request to mimic the scrolling action. I found that whenever the website is revealing new contents during scrolling, there is always a `POST` request sent before anything. The request is for the scrolling action, and the form data can be found in the website page source
 
 4. bypass the age restriction
 
-    - Solution 1: use `Selenium driver` to fill the age confirmation form. This time, the execution time is acceptable because the filling process is much faster. However, I want to avoid using the driver as much as possible
+    - Solution 1: use `Selenium` with [ChromeDriver](https://sites.google.com/a/chromium.org/chromedriver/) to fill the age confirmation form. This time, the execution time is acceptable because the filling process is much faster. However, I want to avoid using the driver as much as possible
 
     - Solution 2: I found that DeviantArt uses cookies to save the age check result. So, by setting the `session.cookies` to the appropriate value, there will be no age check
 
 5. sometimes the `requests` module will close the program with errors `An existing connection was forcibly closed by the remote host` or `Max retries exceeded with url: (image url)`. I am not sure the exact cause, but it is most likely due to the high amount of requests sent from the same IP address in a short period of time; hence the server refuses the connection
 
     - Solution: use `HTTPAdapter` and `Retry` to retry `session.get` in case of `ConnectionError` exception
+
+6. update mechanism
+
+    - Attempt 1: download artworks from newest to oldest until an existing file is found on the disk. This does not work well with the multi-threading implementation, as it makes the program a lot more complicated in order to deal with thread stopping condition
+
+    - Solution: record the last visited artwork information for each artist to check if update is needed. This does not work if the newest upload was deleted by the artist, as the stored information cannot be found in the retrieved HTML. One solution is to record a list of all downloaded artwork information for each artist, then compare it with the parsed data, but this wastes a lot of unnecessary space and memory
 
 ## Todo
 
