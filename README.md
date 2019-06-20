@@ -1,4 +1,10 @@
-# DeviantArt Scraper
+# DeviantArt Scraper (NOTE - currently buggy due to the new website design)
+
+**UPDATE**: DeviantArt is currently rolling out their new UI design, [DeviantArt Eclipse](https://www.deviantarteclipse.com/), to limited registered users and randomly chosen unregistered users. For the latter, you can open an incognito window in Chrome and go to any DeviantArt page. If you lend on the original version, just close the window and try again; you should be able to see the new UI after a few tries.
+
+**ISSUE**: this program can be seen as an unregistered user, meaning there is a chance that it will get the new UI upon visiting artists' pages. In this case, the program will break because the new UI has different image URLs and validation mechanisms from the original one. Currently, the new UI is in beta and thus unstable at times. I therefore will deprecate this project for now until the new UI is pushed to general publicity.
+
+---
 
 This is my personal project created to download images from [DeviantArt](https://www.deviantart.com/) website. The program will grab the highest resolution images and anything achieved in the download button from specified artists to specified download directory. In the download directory, the program will create and name subdirectories using the artist names, then save artworks to the corresponding subdirectories. For each artwork, the file modification time are set in order from newest to oldest, such that you can sort files by modified date. Lastly, the update information is stored for each artist, so the program will only download new uploads.
 
@@ -67,7 +73,6 @@ clear update information (i.e. re-download artworks), set threads to 24, then ru
 ```bash
 python main.py -c all -t 24 -r
 ```
-
 
 ## Challenges
 
