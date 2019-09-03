@@ -9,7 +9,8 @@ class Config:
     def __init__(self, file_path):
         self.file_path = file_path
         self._data = utils.load_json(file_path)
-        self._data["save_directory"] = os.path.normpath(self._data["save_directory"])
+        self._data['save_directory'] = os.path.normpath(self._data['save_directory'])
+        self._data['users'] = list(dict.fromkeys(self._data['users']))
 
     def print(self):
         utils.print_json(self._data)
@@ -19,46 +20,44 @@ class Config:
 
     @property
     def save_dir(self):
-        return self._data["save_directory"]
+        return self._data['save_directory']
 
     @save_dir.setter
     def save_dir(self, save_dir):
         save_dir = os.path.normpath(save_dir)
-        self._data["save_directory"] = save_dir
+        self._data['save_directory'] = save_dir
 
     def update_artist(self, artist_id, value):
-        self._data["artists"][artist_id] = value
+        self._data['artists'][artist_id] = value
 
     @property
-    def artists(self):
-        return self._data["artists"]
+    def users(self):
+        return self._data['users']
 
-    def add_artists(self, artist_ids):
-        for id in artist_ids:
-            try:
-                self.api.gallery(id)
-                self.artists.setdefault(id, None)
-            except:
-                print(f"Artist {id} does not exist")
-
-    def delete_artists(self, artist_ids):
-        if "all" in artist_ids:
-            artist_ids = self.artists.keys()
-        for id in artist_ids:
-            if id in self.artists.keys():
-                self.artists.pop(id, None)
-                artist_name = self.api.gallery(id)["artist_name"]
-                utils.remove_dir(self.save_dir, artist_name)
+    def add_users(self, user_ids):
+        for id in user_ids:
+            if id in self.users:
+                print(f'User ID {id} already exists in config file')
+            elif 'error' in self.api.user(id).keys():
+                print(f'User ID {id} does not exist')
             else:
-                print(f"Artist {id} does not exist")
+                self.users.append(id)
 
-    def clear_artists(self, artist_ids):
-        if "all" in artist_ids:
-            artist_ids = self.artists.keys()
-        for id in artist_ids:
-            if id in self.artists.keys():
-                self.artists[id] = None
-                artist_name = self.api.gallery(id)["artist_name"]
-                utils.remove_dir(self.save_dir, artist_name)
+    def delete_users(self, user_ids):
+        if 'all' in user_ids:
+            user_ids = self.users.copy()
+        for id in user_ids:
+            if id not in self.users:
+                print(f'User ID {id} does not exist in config file')
             else:
-                print(f"Artist {id} does not exist")
+                self.users.remove(id)
+                utils.remove_dir(self.save_dir, str(id))
+
+    def clear_users(self, user_ids):
+        if 'all' in user_ids:
+            user_ids = self.users.copy()
+        for id in user_ids:
+            if id not in self.users:
+                print(f'User ID {id} does not exist in config file')
+            else:
+                utils.remove_dir(self.save_dir, str(id))
