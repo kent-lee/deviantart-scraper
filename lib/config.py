@@ -34,6 +34,10 @@ class Config:
     def users(self):
         return self._data['users']
 
+    @property
+    def collections(self):
+        return self._data['collections']
+
     def add_users(self, user_ids):
         for id in user_ids:
             if id in self.users:

@@ -102,6 +102,52 @@ class DeviantArtAPI:
             offset += 24
         return artworks
 
+    def collection_metadata(self, collection):
+        # e.g. shemetz/favourites/77974139/deviantart-wallpapers
+        username, kind_place, folderid, lowercase_name = collection.split("/")
+        assert kind_place
+        url = f'https://www.deviantart.com/_napi/da-user-profile/api/init/{kind_place}'
+        params = {
+            "username": username,
+            "deviations_limit": 0,
+        }
+        json = self.request('GET', url, params=params).json()
+        folders = json["sectionData"]["modules"][0]["moduleData"]["folders"]["results"]
+        for folder in folders:
+            if str(folder["folderId"]) == folderid:
+                return folder
+        raise ValueError(f'Did not find collection {folderid} ({lowercase_name}).')
+
+    def collection_artworks(self, collection, dir_path=None):
+        # e.g. shemetz/favourites/77974139/deviantart-wallpapers
+        username, kind_place, folderid, lowercase_name = collection.split("/")
+        if kind_place == "favourites":
+            kind = "collection"
+        elif kind_place == "gallery":
+            kind = "gallery"
+        else:
+            raise ValueError(f'Expected "favourites" or "gallery" instead of "{kind_place}", in {collection}')
+        url = f'https://www.deviantart.com/_napi/da-user-profile/api/{kind}/contents'
+        artworks = []
+        offset = 0
+        file_names = utils.file_names(dir_path, pattern=r'-(\d+)\.(.+)$') if dir_path else []
+        while True:
+            payload = {
+                'username': username,
+                'folderid': folderid,
+                'offset': str(offset),
+                'limit': '24',
+            }
+            json = self.request('GET', url, params=payload).json()
+            for a in json['results']:
+                if str(a['deviation']['deviationId']) in file_names:
+                    return artworks
+                artworks.append(a['deviation'])
+            if not json['hasMore']:
+                break
+            offset += 24
+        return artworks
+
     def _download_url(self, artwork, retry=False):
         # download button
         if artwork['isDownloadable']:
@@ -197,11 +243,38 @@ class DeviantArtAPI:
         utils.set_files_mtime(combined_files['name'], dir_path)
         return combined_files
 
+    def save_collection_artworks(self, collection, dir_path):
+        collection_metadata = self.collection_metadata(collection)
+        collection_name = collection_metadata["name"]
+        collection_owner = collection_metadata["owner"]["username"]
+        amount = collection_metadata["size"]
+        print(f'download {amount} artworks for collection {collection_name} by {collection_owner}\n')
+        dir_path = utils.make_dir(dir_path, collection_name)
+        artworks = self.collection_artworks(collection, dir_path)
+        if not artworks:
+            print(f'collection {collection_name} is up-to-date\n')
+            return
+        with ThreadPool(self.threads) as pool:
+            files = pool.map(partial(self.save_artwork, dir_path), artworks)
+        print(f'\ndownload for collection {collection_name} completed\n')
+        combined_files = utils.counter(files)
+        utils.set_files_mtime(combined_files['name'], dir_path)
+        return combined_files
+
     def save_users_artworks(self, user_ids, dir_path):
         print(f'\nthere are {len(user_ids)} users\n')
         result = []
         for user in user_ids:
             files = self.save_user_artworks(user, dir_path)
+            if not files:
+                continue
+            result.append(files)
+        return utils.counter(result)
+
+    def save_collections_artworks(self, collections, dir_path):
+        result = []
+        for collection in collections:
+            files = self.save_collection_artworks(collection, dir_path)
             if not files:
                 continue
             result.append(files)

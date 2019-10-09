@@ -1,7 +1,11 @@
 {
-    "save_directory": "D:\\Pictures\\deviantart",
+    "save_directory": "downloaded_deviantart",
     "users": [
         "GUWEIZ",
         "wataboku"
+    ],
+    "collections": [
+        "shemetz/favourites/77974139/deviantart-wallpapers",
+        "noahbradley/gallery/37091608/magic-the-gathering"
     ]
 }

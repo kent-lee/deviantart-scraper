@@ -11,6 +11,8 @@ def download_users(api, config, option, **kwargs):
         result = api.save_users_artworks(config.users, config.save_dir)
     elif option == 'ranking':
         result = api.save_ranking_artworks(**kwargs)
+    elif option == 'collections':
+        result = api.save_collections_artworks(config.collections, **kwargs)
     duration = time.time() - start_time
     size_mb = result['size'] / 1048576
     print('\nSUMMARY')
@@ -45,6 +47,11 @@ def main():
             'content': args.content,
             'category': args.category,
             'limit': args.n,
+            'dir_path': config.save_dir
+        }
+        download_users(api, config, args.option, **params)
+    elif args.option == 'collections':
+        params = {
             'dir_path': config.save_dir
         }
         download_users(api, config, args.option, **params)

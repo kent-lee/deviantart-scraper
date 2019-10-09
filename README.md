@@ -12,7 +12,7 @@ For people who had used this program before - the format of the config file has 
 
 - the program is multi-threaded; the default number of threads is `your cpu cores * 3`. You can temporarily change the number via the command line interface, or permanently change the number via the source code (in `lib/deviantart.py` at line 13)
 - each artwork filename is appended with its artwork ID at the end for update validation purpose. The program downloads artworks for a user from newest to oldest until an existing file is found on the disk
-- downloaded artworks are categorized by user and ranking mode
+- downloaded artworks are categorized by user, ranking mode, or collection name
 - modification time of each artwork is set according to upload order such that you can sort files by modified date
 - ranking will overwrites existing files
 
@@ -30,6 +30,7 @@ For people who had used this program before - the format of the config file has 
 
     - `save directory`: the save directory path
     - `users`: the username shown on website or in URL
+    - `collections`: the part of the URL of each collection after https://www.deviantart.com/ (for example: noahbradley/gallery/37091608/magic-the-gathering)
 
 ## Usage
 
@@ -39,13 +40,14 @@ display help message
 $ python main.py -h
 
 usage: main.py [-h] [-f FILE] [-l] [-s SAVE_DIR] [-t THREADS]
-               {artwork,ranking} ...
+               {artwork,ranking,collections} ...
 
 positional arguments:
   {artwork,ranking}
     artwork          download artworks from user IDs specified in "users"
                      field
     ranking          download top N ranking artworks based on given conditions
+    collections      download artworks from collections specified in "collections" field
 
 optional arguments:
   -h, --help         show this help message and exit
@@ -131,6 +133,12 @@ clear directories for all user IDs in config file, set threads to 24, then downl
 python main.py artwork -c all -t 24
 ```
 
+download collections from collection (partial) URLs stored in config file; update artworks if directories already exist
+
+```bash
+python main.py collections
+```
+
 ## Challenges
 
 1. there are two ways to download an image: (1) download button URL. (2) direct image URL. The former is preferred because it grabs the highest image quality and other file formats including `gif`, `swf`, `abr`, and `zip`. However, this has a small problem. The URL contains a token that turns invalid if certain actions are performed, such as refreshing the page, reopening the browser, and exceeding certain time limit
@@ -163,5 +171,5 @@ python main.py artwork -c all -t 24
 
 ## Todo
 
-- add more functionality (e.g. user bookmarks)
+- find more things to add to the Todo list
 

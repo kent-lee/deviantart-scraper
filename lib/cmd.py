@@ -19,6 +19,9 @@ def ranking_parser(subparsers):
     ranking.add_argument("-category", metavar="CATEGORY", choices=categories, default='all', help="categories: {%(choices)s} (default: %(default)s)")
     ranking.add_argument("-n", metavar="N", type=int, default=30, help="get top N artworks (default: %(default)s)")
 
+def collections_parser(subparsers):
+    subparsers.add_parser("collections", help="download artworks from collections specified in \"collections\" field")
+
 def main_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", metavar=("FILE"), default=os.path.join("data", "config.json"), help="load file for this instance (default: %(default)s)")
@@ -28,4 +31,5 @@ def main_parser():
     subparsers = parser.add_subparsers(dest="option")
     artwork_parser(subparsers)
     ranking_parser(subparsers)
+    collections_parser(subparsers)
     return parser.parse_args()
