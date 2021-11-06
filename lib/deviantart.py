@@ -103,43 +103,30 @@ class DeviantArtAPI:
         return artworks
 
     def _download_url(self, artwork, retry=False):
-        # download button
-        if artwork['isDownloadable']:
-            res = self.request('GET', artwork['url'])
-            html = unescape(res.text)
-            return re.search(r'href="(https://www.deviantart.com/download/.+?)"', html)[1]
-        url = next(a['src'] for a in artwork['files'] if a['type']=='fullview')
-        # direct image url with other prefixes like /f/ or https://img00
-        if '/v1/fill/' not in url:
-            return url
-        # in case for new uploads where only image quality is allowed to modify
-        if retry:
-            return re.sub(r'(q_\d+,strp|strp)', 'q_100', url)
-        # set image properties. For more details, visit below link:
-        # https://support.wixmp.com/en/article/image-service-3835799
-        a = self.artwork(artwork['deviationId'])
-        w = a['extended']['originalFile']['width']
-        h = a['extended']['originalFile']['height']
-        url = re.match(r'(.+?)\?token=', url)[1]
-        url = re.sub('/f/', '/intermediary/f/', url)
-        url = re.sub('/v1/fill/.*/', f'/v1/fill/w_{w},h_{h},q_100/', url)
+        baseUri = artwork['media']['baseUri']
+        prettyName = artwork['media']['prettyName']
+        token = artwork['media']['token'][0]
+        url = ''
+        for t in reversed(artwork['media']['types']):
+            if t['r'] == 0:
+                url = t['c']
+            if url:
+                break
+        if not url:
+            return ''
+        url = url.replace('<prettyName>', prettyName)
+        url = f'{baseUri}/{url}?token={token}'
         return url
 
-    def _file_name(self, response, suffix):
+    def _file_name(self, response, artwork):
         # get name from the response of download button url
         if 'Content-Disposition' in response.headers:
             file_name = response.headers['Content-Disposition']
             file_name = re.search(r"''(.*)", file_name)[1]
-        # get name from response url with image settings
-        elif '/v1/fill/' in response.url:
-            file_name = re.search(r'w_\d+,h_\d+,q_100/(.*?)($|\?token=.*)', response.url)[1]
         else:
-            # get name from response url without image settings
-            try:
-                file_name = re.search(r'.*wixmp.com/f/.*/(.*)\?token=', response.url)[1]
-            # get name from response url that is not image (e.g. gif, swf)
-            except TypeError:
-                file_name = re.match(r'https://.*/(.*)', response.url)[1]
+            _, file_extension = os.path.splitext(artwork['media']['baseUri'])
+            file_name = artwork['media']['prettyName'] + file_extension
+        suffix = artwork['deviationId']
         return re.sub(r'\.(.+)$', rf'-{suffix}.\1', file_name)
 
     def save_artwork(self, dir_path, artwork):
@@ -159,7 +146,7 @@ class DeviantArtAPI:
         image_title = artwork['title']
         file['title'].append(image_title)
         file['url'].append(download_url)
-        file_name = self._file_name(res, artwork['deviationId'])
+        file_name = self._file_name(res, artwork)
         file['name'].append(file_name)
         with open(os.path.join(dir_path, file_name), 'wb') as f:
             for chunk in res.iter_content(chunk_size=self.download_chunk_size):
